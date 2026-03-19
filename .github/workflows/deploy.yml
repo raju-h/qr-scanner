@@ -160,8 +160,8 @@ jobs:
             # Start/restart the stack
             docker compose -f docker-compose.ci.yml up -d
 
-            # Run Prisma migrations (prisma is installed globally in the image)
-            docker compose -f docker-compose.ci.yml exec -T app prisma migrate deploy
+            # Run Prisma migrations (prisma is installed locally in the image)
+            docker compose -f docker-compose.ci.yml exec -T app npx prisma migrate deploy
 
             # Wait for healthcheck and verify via Traefik
             sleep 15

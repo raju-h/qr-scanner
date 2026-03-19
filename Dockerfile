@@ -26,8 +26,8 @@ COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/prisma.config.ts ./prisma.config.ts
 # Prisma CLI is a devDependency but needed in production for `prisma migrate deploy`.
-# Install globally so the command is available without npx or local node_modules.
-RUN npm install -g prisma@7
+# Must install locally (not globally) so prisma.config.ts can resolve `prisma/config`.
+RUN npm install --no-save prisma@7
 USER nextjs
 EXPOSE 3000
 ENV PORT=3000
