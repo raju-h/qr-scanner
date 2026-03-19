@@ -1,0 +1,27 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Scan {
+  id         String   @id @default(cuid())
+  value      String
+  type       ScanType
+  rawType    String?
+  timestamp  DateTime @default(now())
+  deviceInfo Json?
+  createdAt  DateTime @default(now())
+
+  @@index([timestamp(sort: Desc)])
+  @@index([value])
+  @@map("scans")
+}
+
+enum ScanType {
+  QR_CODE
+  EAN_13
+}

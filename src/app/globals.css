@@ -1,0 +1,64 @@
+@import "tailwindcss";
+
+/*
+ * Custom animations for the scanner UI.
+ * Tailwind 4 uses @theme for custom values and @utility for custom utilities.
+ */
+
+@theme {
+  --animate-scan-pulse: scan-pulse 2s ease-in-out infinite;
+  --animate-scan-line: scan-line 2.5s ease-in-out infinite;
+  --animate-slide-up: slide-up 0.3s ease-out;
+}
+
+/* Subtle pulse on the corner brackets — draws the eye to the scan region. */
+@keyframes scan-pulse {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.7;
+    transform: scale(1.04);
+  }
+}
+
+/* Horizontal scan line that sweeps down through the scan region. */
+@keyframes scan-line {
+  0% {
+    top: 0;
+    opacity: 0;
+  }
+  10% {
+    opacity: 1;
+  }
+  90% {
+    opacity: 1;
+  }
+  100% {
+    top: 100%;
+    opacity: 0;
+  }
+}
+
+/* Toast slide-up entry animation. */
+@keyframes slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* iOS safe area padding utilities */
+@supports (padding-top: env(safe-area-inset-top)) {
+  .pt-safe-top {
+    padding-top: env(safe-area-inset-top);
+  }
+  .pb-safe-bottom {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}
