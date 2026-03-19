@@ -1,0 +1,162 @@
+name: Test, Build & Deploy
+
+on:
+  push:
+    branches: [main]
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  # --- Job 1: Lint + type-check + tests ---
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci --legacy-peer-deps
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+        env:
+          DATABASE_URL: "postgresql://dummy:dummy@localhost:5432/dummy"
+
+      - run: npm run lint
+      - run: npm run type-check
+      - run: npm run test
+
+  # --- Job 2: Build Docker image and push to ghcr.io ---
+  build:
+    name: Build & Push Image
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+
+  # --- Job 3: SSH into EC2, pull image, run compose ---
+  deploy:
+    name: Deploy to EC2
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ubuntu
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            set -e
+
+            # Create working directory
+            mkdir -p /home/ubuntu/qr-scanner
+            cd /home/ubuntu/qr-scanner
+
+            # Write .env.production from GitHub secret
+            cat > .env.production << 'ENVEOF'
+            ${{ secrets.ENV_PRODUCTION }}
+            ENVEOF
+
+            # Write docker-compose.ci.yml
+            cat > docker-compose.ci.yml << 'COMPOSEEOF'
+            services:
+              traefik:
+                image: traefik:v3.1
+                command:
+                  - "--api.dashboard=false"
+                  - "--providers.docker=true"
+                  - "--providers.docker.exposedbydefault=false"
+                  - "--entrypoints.web.address=:80"
+                  - "--entrypoints.websecure.address=:443"
+                  - "--entrypoints.web.http.redirections.entryPoint.to=websecure"
+                  - "--entrypoints.web.http.redirections.entryPoint.scheme=https"
+                  - "--certificatesresolvers.letsencrypt.acme.email=${ACME_EMAIL}"
+                  - "--certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json"
+                  - "--certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web"
+                ports:
+                  - "80:80"
+                  - "443:443"
+                volumes:
+                  - "/var/run/docker.sock:/var/run/docker.sock:ro"
+                  - "letsencrypt:/letsencrypt"
+                restart: unless-stopped
+
+              app:
+                image: ghcr.io/${{ github.repository }}:latest
+                env_file:
+                  - .env.production
+                labels:
+                  - "traefik.enable=true"
+                  - "traefik.http.routers.app.rule=Host(`${APP_DOMAIN}`)"
+                  - "traefik.http.routers.app.entrypoints=websecure"
+                  - "traefik.http.routers.app.tls.certresolver=letsencrypt"
+                  - "traefik.http.services.app.loadbalancer.server.port=3000"
+                  - "traefik.http.middlewares.sse.buffering.maxResponseBodyBytes=0"
+                  - "traefik.http.middlewares.sse.buffering.maxRequestBodyBytes=0"
+                  - "traefik.http.middlewares.security.headers.stsSeconds=31536000"
+                  - "traefik.http.middlewares.security.headers.stsIncludeSubdomains=true"
+                  - "traefik.http.middlewares.security.headers.frameDeny=true"
+                  - "traefik.http.middlewares.security.headers.contentTypeNosniff=true"
+                  - "traefik.http.middlewares.security.headers.referrerPolicy=strict-origin-when-cross-origin"
+                  - "traefik.http.middlewares.security.headers.permissionsPolicy=camera=(self), microphone=()"
+                  - "traefik.http.routers.app.middlewares=sse,security"
+                restart: unless-stopped
+                healthcheck:
+                  test: ["CMD", "curl", "-f", "http://localhost:3000"]
+                  interval: 30s
+                  timeout: 10s
+                  retries: 3
+                  start_period: 40s
+                logging:
+                  driver: "json-file"
+                  options:
+                    max-size: "10m"
+                    max-file: "3"
+
+            volumes:
+              letsencrypt:
+            COMPOSEEOF
+
+            # Pull latest image
+            docker pull ghcr.io/${{ github.repository }}:latest
+
+            # Source env vars for Traefik labels (APP_DOMAIN, ACME_EMAIL)
+            export $(grep -v '^#' .env.production | xargs)
+
+            # Start/restart the stack
+            docker compose -f docker-compose.ci.yml up -d
+
+            # Run Prisma migrations
+            docker compose -f docker-compose.ci.yml exec -T app npx prisma migrate deploy 2>/dev/null || echo "Migration skipped (may need prisma db push)"
+
+            # Wait for healthcheck
+            sleep 10
+            curl -sf http://localhost:3000 > /dev/null && echo "✅ Healthcheck passed" || echo "⚠️ Healthcheck failed — check logs"

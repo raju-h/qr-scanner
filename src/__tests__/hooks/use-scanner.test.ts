@@ -73,6 +73,9 @@ describe("useScanner", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     decodeCallback = null;
+    // The hook checks window.isSecureContext before calling getUserMedia —
+    // jsdom defaults to false, so we override it for tests.
+    Object.defineProperty(window, "isSecureContext", { value: true, writable: true });
   });
 
   afterEach(() => {

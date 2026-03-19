@@ -43,4 +43,4 @@ export interface ApiError {
 
 export type ScannerStatus = "idle" | "scanning" | "error";
 
-export type ScannerError = "PERMISSION_DENIED" | "NO_CAMERA" | "UNKNOWN";
+export type ScannerError = "PERMISSION_DENIED" | "NO_CAMERA" | "INSECURE_CONTEXT" | "UNKNOWN";

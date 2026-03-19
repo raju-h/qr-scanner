@@ -70,6 +70,21 @@ export function useScanner({ onScan }: UseScannerOptions): UseScannerReturn {
 
     async function startScanning(): Promise<void> {
       try {
+        // Pre-flight: getUserMedia requires a secure context (HTTPS or localhost).
+        // On HTTP, navigator.mediaDevices is undefined on mobile browsers — detect
+        // this early and show a clear error instead of a stuck loading screen.
+        if (typeof window !== "undefined" && !window.isSecureContext) {
+          setError("INSECURE_CONTEXT");
+          setIsLoading(false);
+          return;
+        }
+
+        if (!navigator.mediaDevices?.getUserMedia) {
+          setError("NO_CAMERA");
+          setIsLoading(false);
+          return;
+        }
+
         // Request camera — facingMode "environment" picks the rear camera on mobile.
         // Safari requires getUserMedia before passing the stream to @zxing.
         const stream = await navigator.mediaDevices.getUserMedia({

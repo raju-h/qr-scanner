@@ -121,7 +121,43 @@ export function ScannerView(): React.ReactElement {
     );
   }
 
-  if (error === "NO_CAMERA") {
+  if (error === "INSECURE_CONTEXT") {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center px-6 text-center">
+        <div className="rounded-2xl bg-gray-900/80 p-8 backdrop-blur-sm">
+          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-yellow-500/10">
+            <svg className="h-8 w-8 text-yellow-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+            </svg>
+          </div>
+          <h2 className="text-xl font-semibold text-white">HTTPS Required</h2>
+          <p className="mt-3 text-sm text-gray-400">
+            Camera access requires a secure (HTTPS) connection. Mobile browsers block
+            camera access on plain HTTP for privacy.
+          </p>
+          <div className="mt-4 rounded-lg bg-gray-800 p-4 text-left text-xs text-gray-300">
+            <p className="font-medium text-gray-200">How to fix:</p>
+            <ul className="mt-2 list-inside list-disc space-y-1">
+              <li>Access this app via <strong>https://</strong> instead of http://</li>
+              <li>On localhost, camera access works without HTTPS</li>
+              <li>For local network testing, set up a local HTTPS proxy</li>
+            </ul>
+          </div>
+          <div className="mt-5 flex flex-col gap-3">
+            <ManualEntry onSubmit={submitScan} />
+            <Link
+              href="/history"
+              className="inline-block rounded-lg bg-gray-700 px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-gray-600"
+            >
+              View History
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (error === "NO_CAMERA" || error === "UNKNOWN") {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center px-6">
         <ManualEntry onSubmit={submitScan} />
