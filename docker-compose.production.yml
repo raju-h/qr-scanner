@@ -26,6 +26,8 @@ services:
     build: .
     env_file:
       - .env.production
+    environment:
+      - HOSTNAME=0.0.0.0
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.app.rule=Host(`${APP_DOMAIN}`)"
@@ -43,7 +45,7 @@ services:
       - "traefik.http.routers.app.middlewares=sse,security"
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000"]
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 30s
       timeout: 10s
       retries: 3

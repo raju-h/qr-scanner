@@ -86,12 +86,18 @@ jobs:
             ${{ secrets.ENV_PRODUCTION }}
             ENVEOF
 
+            # Source env vars so docker compose can interpolate ${APP_DOMAIN}, ${ACME_EMAIL}
+            set -a
+            . .env.production
+            set +a
+
             # Write docker-compose.ci.yml
             cat > docker-compose.ci.yml << 'COMPOSEEOF'
             services:
               traefik:
-                image: traefik:v3.1
+                image: traefik:v3.6
                 command:
+                  - "--log.level=WARN"
                   - "--api.dashboard=false"
                   - "--providers.docker=true"
                   - "--providers.docker.exposedbydefault=false"
@@ -114,6 +120,8 @@ jobs:
                 image: ghcr.io/raju-h/qr-scanner:latest
                 env_file:
                   - .env.production
+                environment:
+                  - HOSTNAME=0.0.0.0
                 labels:
                   - "traefik.enable=true"
                   - "traefik.http.routers.app.rule=Host(`${APP_DOMAIN}`)"
@@ -131,7 +139,7 @@ jobs:
                   - "traefik.http.routers.app.middlewares=sse,security"
                 restart: unless-stopped
                 healthcheck:
-                  test: ["CMD", "curl", "-f", "http://localhost:3000"]
+                  test: ["CMD", "node", "-e", "fetch('http://localhost:3000').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
                   interval: 30s
                   timeout: 10s
                   retries: 3
@@ -149,15 +157,13 @@ jobs:
             # Pull latest image
             docker pull ghcr.io/raju-h/qr-scanner:latest
 
-            # Source env vars for Traefik labels (APP_DOMAIN, ACME_EMAIL)
-            export $(grep -v '^#' .env.production | xargs)
-
             # Start/restart the stack
             docker compose -f docker-compose.ci.yml up -d
 
-            # Run Prisma migrations
-            docker compose -f docker-compose.ci.yml exec -T app npx prisma migrate deploy 2>/dev/null || echo "Migration skipped (may need prisma db push)"
+            # Run Prisma migrations (prisma is installed globally in the image)
+            docker compose -f docker-compose.ci.yml exec -T app prisma migrate deploy
 
-            # Wait for healthcheck
-            sleep 10
-            curl -sf http://localhost:3000 > /dev/null && echo "✅ Healthcheck passed" || echo "⚠️ Healthcheck failed — check logs"
+            # Wait for healthcheck and verify via Traefik
+            sleep 15
+            docker compose -f docker-compose.ci.yml ps
+            docker exec qr-scanner-app-1 node -e "fetch('http://localhost:3000').then(r=>{console.log('Healthcheck:',r.status);process.exit(r.ok?0:1)}).catch(e=>{console.log('FAIL:',e.message);process.exit(1)})"

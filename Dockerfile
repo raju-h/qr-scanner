@@ -25,9 +25,17 @@ COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/prisma.config.ts ./prisma.config.ts
+# Prisma CLI is a devDependency but needed in production for `prisma migrate deploy`.
+# Install globally so the command is available without npx or local node_modules.
+RUN npm install -g prisma@7
 USER nextjs
 EXPOSE 3000
 ENV PORT=3000
+# Next.js standalone uses HOSTNAME to determine bind address.
+# Docker sets HOSTNAME to container ID by default, causing the server
+# to bind only to the container's specific IP. Override to 0.0.0.0
+# so it listens on all interfaces (required for healthchecks + Traefik).
+ENV HOSTNAME=0.0.0.0
 HEALTHCHECK --interval=30s --timeout=10s --retries=3 --start-period=40s \
-  CMD curl -f http://localhost:3000 || exit 1
+  CMD node -e "fetch('http://localhost:3000').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 CMD ["node", "server.js"]

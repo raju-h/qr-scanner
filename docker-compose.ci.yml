@@ -4,7 +4,7 @@
 
 services:
   traefik:
-    image: traefik:v3.1
+    image: traefik:v3.6
     command:
       - "--api.dashboard=false"
       - "--providers.docker=true"
@@ -28,6 +28,8 @@ services:
     image: ghcr.io/raju-h/qr-scanner:latest
     env_file:
       - .env.production
+    environment:
+      - HOSTNAME=0.0.0.0
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.app.rule=Host(`${APP_DOMAIN}`)"
@@ -45,7 +47,7 @@ services:
       - "traefik.http.routers.app.middlewares=sse,security"
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000"]
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 30s
       timeout: 10s
       retries: 3
