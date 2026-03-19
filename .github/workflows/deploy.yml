@@ -6,7 +6,8 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
+  # github.repository is "Raju-H/qr-scanner" but ghcr.io requires lowercase
+  IMAGE_NAME: raju-h/qr-scanner
 
 jobs:
   # --- Job 1: Lint + type-check + tests ---
@@ -110,7 +111,7 @@ jobs:
                 restart: unless-stopped
 
               app:
-                image: ghcr.io/${{ github.repository }}:latest
+                image: ghcr.io/raju-h/qr-scanner:latest
                 env_file:
                   - .env.production
                 labels:
@@ -146,7 +147,7 @@ jobs:
             COMPOSEEOF
 
             # Pull latest image
-            docker pull ghcr.io/${{ github.repository }}:latest
+            docker pull ghcr.io/raju-h/qr-scanner:latest
 
             # Source env vars for Traefik labels (APP_DOMAIN, ACME_EMAIL)
             export $(grep -v '^#' .env.production | xargs)
