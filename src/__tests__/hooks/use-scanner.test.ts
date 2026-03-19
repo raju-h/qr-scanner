@@ -18,8 +18,8 @@ vi.mock("@zxing/browser", () => {
   };
 
   class MockBrowserMultiFormatReader {
-    async decodeFromVideoDevice(
-      _deviceId: string | undefined,
+    async decodeFromStream(
+      _stream: unknown,
       _videoElem: unknown,
       callback: (result: unknown, error: unknown, controls: unknown) => void,
     ) {
@@ -33,6 +33,13 @@ vi.mock("@zxing/browser", () => {
     BrowserMultiFormatReader: MockBrowserMultiFormatReader,
   };
 });
+
+vi.mock("@zxing/library", () => ({
+  DecodeHintType: {
+    TRY_HARDER: 3,
+    POSSIBLE_FORMATS: 2,
+  },
+}));
 
 import { useScanner } from "@/hooks/use-scanner";
 

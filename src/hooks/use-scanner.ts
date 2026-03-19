@@ -7,6 +7,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { BrowserMultiFormatReader, BarcodeFormat } from "@zxing/browser";
 import type { IScannerControls } from "@zxing/browser";
+import { DecodeHintType } from "@zxing/library";
 import type { ScannerError, ScanType } from "@/types";
 
 /** Ignore repeat scans of the same value within this window. */
@@ -87,14 +88,28 @@ export function useScanner({ onScan }: UseScannerOptions): UseScannerReturn {
 
         // Request camera — facingMode "environment" picks the rear camera on mobile.
         // Safari requires getUserMedia before passing the stream to @zxing.
+        // Min 640px width ensures enough resolution for decoding lower-quality codes.
         const stream = await navigator.mediaDevices.getUserMedia({
           video: {
             facingMode: { ideal: "environment" },
-            width: { ideal: 1280 },
-            height: { ideal: 720 },
+            width: { min: 640, ideal: 1920 },
+            height: { min: 480, ideal: 1080 },
           },
           audio: false,
         });
+
+        // Request continuous autofocus after acquiring the stream — not all
+        // devices support it, so apply as a best-effort constraint.
+        const videoTrackForFocus = stream.getVideoTracks()[0];
+        if (videoTrackForFocus) {
+          try {
+            await videoTrackForFocus.applyConstraints({
+              advanced: [{ focusMode: "continuous" } as MediaTrackConstraintSet],
+            });
+          } catch {
+            // focusMode not supported on this device — that's fine
+          }
+        }
 
         if (cancelled) {
           stream.getTracks().forEach((t) => t.stop());
@@ -123,11 +138,22 @@ export function useScanner({ onScan }: UseScannerOptions): UseScannerReturn {
           videoRef.current.srcObject = stream;
         }
 
-        const reader = new BrowserMultiFormatReader();
+        // Configure decode hints for better scanning of lower-quality codes:
+        // - TRY_HARDER: spend more CPU per frame, try rotated orientations (0°/90°/180°/270°)
+        // - POSSIBLE_FORMATS: only probe QR + EAN-13 instead of all formats (faster per frame)
+        const hints = new Map<DecodeHintType, unknown>();
+        hints.set(DecodeHintType.TRY_HARDER, true);
+        hints.set(DecodeHintType.POSSIBLE_FORMATS, [
+          BarcodeFormat.QR_CODE,
+          BarcodeFormat.EAN_13,
+        ]);
 
-        // Decode continuously from the video element
-        const controls = await reader.decodeFromVideoDevice(
-          undefined,
+        const reader = new BrowserMultiFormatReader(hints);
+
+        // Decode continuously from our stream — NOT decodeFromVideoDevice which
+        // opens a second camera stream with default (low) resolution constraints
+        const controls = await reader.decodeFromStream(
+          stream,
           videoRef.current ?? undefined,
           (result, _error, _controls) => {
             if (!result) return;
