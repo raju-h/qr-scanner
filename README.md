@@ -4,11 +4,11 @@ Mobile-first web application that scans QR codes and EAN-13 barcodes directly fr
 
 ## Tech Stack
 
-Next.js 14 (App Router) · TypeScript (strict mode) · Tailwind CSS · Prisma ORM · PostgreSQL · Docker · Traefik · Vitest
+Next.js 16 (App Router) · React 19 · TypeScript 5.8 (strict mode) · Tailwind CSS 4 · Prisma 7 · PostgreSQL · ESLint 9 · Vitest 3 · Docker · Traefik
 
 ## Prerequisites
 
-- Node.js 20+
+- Node.js 22+
 - Docker & Docker Compose
 - PostgreSQL 16 (via Docker for local dev, AWS RDS for production)
 
@@ -16,22 +16,23 @@ Next.js 14 (App Router) · TypeScript (strict mode) · Tailwind CSS · Prisma OR
 
 ```bash
 # Clone the repository
-git clone <repo-url> && cd qr-scanner
+git clone https://github.com/Raju-H/qr-scanner.git && cd qr-scanner
 
 # Install dependencies
-npm install
+npm install --legacy-peer-deps
 
 # Start local Postgres
 docker compose up -d
 
 # Copy environment variables
 cp .env.example .env.local
+# Edit .env.local with your DATABASE_URL
 
-# Run database migrations
-npx prisma migrate dev
-
-# Generate Prisma client
+# Generate Prisma client (requires DATABASE_URL)
 npx prisma generate
+
+# Push database schema
+npx prisma db push
 
 # Start the dev server
 npm run dev
@@ -39,16 +40,21 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000) on your phone (same Wi-Fi network) to test the camera scanner.
 
+> **Note:** Camera access requires HTTPS on mobile browsers. On `localhost` it works without HTTPS. For local network testing from a phone, you'll need to deploy to a server with SSL or use a tunneling tool.
+
 ## Production Deployment
 
-The app runs on AWS EC2 with Docker Compose and Traefik for automatic SSL. See `DEPLOYMENT_GUIDE.md` for detailed EC2 + RDS setup instructions.
+The app deploys automatically via **GitHub Actions CI/CD**. Every push to `main` triggers: Test → Build Docker image → Push to ghcr.io → SSH deploy to EC2.
 
+See `DEPLOYMENT_GUIDE.md` for detailed AWS (EC2 + RDS) + Cloudflare DNS + Traefik SSL setup.
+
+For manual deployment fallback:
 ```bash
-# On the EC2 instance:
-./deploy.sh
+ssh -i qr-scanner-key.pem ubuntu@<Elastic-IP>
+cd /home/ubuntu/qr-scanner
+docker pull ghcr.io/raju-h/qr-scanner:latest
+docker compose -f docker-compose.ci.yml up -d
 ```
-
-This pulls the latest code, builds the Docker image, runs Prisma migrations, restarts all services, and runs a health check.
 
 ## Environment Variables
 
@@ -69,12 +75,12 @@ Copy `.env.example` to `.env.local` (dev) or `.env.production` (prod) and fill i
 | `npm run dev` | Start development server (port 3000) |
 | `npm run build` | Production build |
 | `npm run start` | Start production server |
-| `npm run lint` | ESLint check |
+| `npm run lint` | ESLint 9 check (flat config) |
 | `npm run type-check` | TypeScript compiler check (no emit) |
-| `npm run test` | Run Vitest test suite |
+| `npm run test` | Run Vitest 3 test suite (69 tests) |
 | `npm run test:watch` | Vitest in watch mode |
-| `npx prisma migrate dev` | Apply migrations locally |
-| `npx prisma generate` | Regenerate Prisma client |
+| `npx prisma generate` | Regenerate Prisma client into `src/generated/prisma/` |
+| `npx prisma db push` | Push schema to database |
 | `docker compose up -d` | Start local dev database |
 
 ## Project Structure
@@ -91,7 +97,8 @@ src/
 │   └── ui/               # Shared: badge, button, skeleton, toast
 ├── hooks/                # useScanner, useScans, useDeviceInfo
 ├── lib/                  # Prisma client, SSE manager, validators, utils
-└── types/                # Shared TypeScript types
+├── types/                # Shared TypeScript types
+└── generated/            # Prisma 7 generated client (gitignored)
 ```
 
 ## Architecture Decisions
@@ -99,5 +106,9 @@ src/
 - **@zxing/browser** for scanning — best QR + EAN-13 support, actively maintained.
 - **SSE over WebSocket** — simpler for one-way push, works natively in Next.js route handlers.
 - **Cursor pagination over offset** — better performance at scale, no skip-count drift.
+- **Prisma 7 with driver adapters** — type safety, `@prisma/adapter-pg` for PostgreSQL, generated client in `src/generated/`.
+- **Tailwind CSS 4** — CSS-first configuration via `@import "tailwindcss"` and `@theme`, no JS config file.
+- **ESLint 9 flat config** — `eslint.config.mjs` with `eslint-config-next` exporting flat arrays natively.
 - **Traefik over Nginx** — Docker-native, built-in ACME SSL, entire infra in one compose file.
-- **Vitest over Jest** — faster, ESM-native, better TypeScript DX.
+- **Vitest 3 over Jest** — faster, ESM-native, better TypeScript DX.
+- **GitHub Actions CI/CD** — automated test → build → deploy pipeline on every push to main.
